@@ -5,7 +5,7 @@ import soundfile as sf
 import random
 import librosa
 from matplotlib import pyplot as plt
-import seaborn as sns
+#import seaborn as sns
 import  tensorflow as tf
 import tensorflow_addons as tfa
 
@@ -110,7 +110,7 @@ class CreamData:
             emotions_lable.append(self.get_emotion(i)[1])
             emotions.append(self.get_emotion(i)[2])
             gender.append(self.get_emotion(i)[3])
-            paths.append(self.path_to_standardize_audio_data + i)
+            paths.append(self.path_to_standardize_audio_data + '/' + i)
 
         df = pd.DataFrame.from_dict({
                 'id': ids,
@@ -215,20 +215,23 @@ class CreamData:
                 F = self.F_SpecAugmentation
             )
             process_data.append(final_spec)
-        unprocess_data['X'] = process_data
+            print(np.array(process_data).shape)
+        np.save('extracted_features_matrices.npy', np.array(process_data))
         self.processed_data =  unprocess_data
+        self.processed_data.to_csv('extracted_features.csv', index=False)
+        
 
 
-    def train_test_split(self):
+    def train_test_split(self, processed_data):
         '''
             For now we'll have random choice for now
         ''' 
-        self.standardize_audio_duration()
-        self.make_dataset()
-        self.extract_features()
+        # self.standardize_audio_duration()
+        # self.make_dataset()
+        # self.extract_features()
         female_size = len(self.female)
         male_size = len(self.male)
-        data = self.processed_data.copy()
+        data = processed_data.copy()
         test_female = random.sample(self.female, int(self.test_size * female_size))
         remaining = list(set(self.female) - set(test_female))
         validation_female = random.sample(remaining,int(self.validation_size * female_size))
@@ -245,26 +248,25 @@ class CreamData:
         self.test_set = test.copy()
         self.train_set = train.copy()
         self.validation_set = validation.copy()
+        return train, validation, test
         
 
 
 
         
-    def print_confusion_matrix(confusion_matrix, class_names, figsize = (10,7), fontsize = 10):
+    # def print_confusion_matrix(confusion_matrix, class_names, figsize = (10,7), fontsize = 10):
 
-        df_cm = pd.DataFrame(
-            confusion_matrix, index =class_names, columns = class_names
-        )
-        fig = plt.figure(figsize=figsize)
+    #     df_cm = pd.DataFrame(
+    #         confusion_matrix, index =class_names, columns = class_names
+    #     )
+    #     fig = plt.figure(figsize=figsize)
 
-        try:
-            heatmap = sns.heatmap(df_cm, annt = True, fmt = "d")
-        except ValueError:
-            raise ValueError("Confusion matrix must be right")
+    #     try:
+    #         heatmap = sns.heatmap(df_cm, annt = True, fmt = "d")
+    #     except ValueError:
+    #         raise ValueError("Confusion matrix must be right")
 
-        heatmap.yaxis.set_ticklabels(heatmap.yaxis.get_ticklabels(), rotation=0, ha='right', fontsize=fontsize)
-        heatmap.xaxis.set_ticklabels(heatmap.xaxis.get_ticklabels(), rotation=45, ha='right', fontsize=fontsize)
-        plt.ylabel('True label')
-        plt.xlabel('Predicted label')
-        
-
+    #     heatmap.yaxis.set_ticklabels(heatmap.yaxis.get_ticklabels(), rotation=0, ha='right', fontsize=fontsize)
+    #     heatmap.xaxis.set_ticklabels(heatmap.xaxis.get_ticklabels(), rotation=45, ha='right', fontsize=fontsize)
+    #     plt.ylabel('True label')
+    #     plt.xlabel('Predicted label')
