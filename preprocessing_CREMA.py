@@ -7,7 +7,7 @@ import librosa
 from matplotlib import pyplot as plt
 #import seaborn as sns
 import  tensorflow as tf
-import tensorflow_addons as tfa
+#import tensorflow_addons as tfa
 
 
 class CreamData:
@@ -173,11 +173,11 @@ class CreamData:
         source_control_point_locations = tf.random.uniform((1, 4, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
         dest_control_point_locations = tf.random.uniform((1, 4, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
             # Apply sparse image warp
-        warped_spec_tensor = tfa.image.sparse_image_warp(
-                            spec_tensor,
-                            source_control_point_locations=source_control_point_locations,
-                            dest_control_point_locations=dest_control_point_locations,
-                            num_boundary_points=2)
+        warped_spec_tensor = 0#tfa.image.sparse_image_warp(
+        #                    spec_tensor,
+        #                    source_control_point_locations=source_control_point_locations,
+        #                    dest_control_point_locations=dest_control_point_locations,
+        #                   num_boundary_points=2)
 
         image, _ = warped_spec_tensor
         warped_mel = tf.squeeze(image,axis = 0)[:,:,0].numpy()
@@ -242,9 +242,12 @@ class CreamData:
         validation_male = random.sample(remaining,int(self.validation_size * male_size))
         train_male = list(set(remaining)- set(validation_male))
 
-        train = data[data['id'].astype(int).isin(train_female + train_male)]
-        validation = data[data['id'].astype(int).isin(validation_female + validation_male)]
-        test = data[data['id'].astype(int).isin(test_female + test_male)]
+        train_indices = data['id'].astype(int).isin(train_female + train_male)
+        train = data[train_indices]
+        validation_indices = data['id'].astype(int).isin(validation_female + validation_male)
+        validation = data[validation_indices]
+        test_indices = data['id'].astype(int).isin(test_female + test_male)
+        test = data[test_indices]
         self.test_set = test.copy()
         self.train_set = train.copy()
         self.validation_set = validation.copy()
