@@ -5,10 +5,18 @@ import soundfile as sf
 import random
 import librosa
 from matplotlib import pyplot as plt
-#import seaborn as sns
+import gc
 import  tensorflow as tf
-#import tensorflow_addons as tfa
+import tensorflow_addons as tfa
+import time
+from memory_profiler import memory_usage
+from custom_dataset import CreamTorchData
+from torch.utils.data import DataLoader
 
+def clear_memory(variables):
+    for var in variables:
+        del var
+    gc.collect()
 
 class CreamData:
 
@@ -32,7 +40,8 @@ class CreamData:
                      "FEA": "fear",
                      "HAP": "happy",
                      "NEU": "neutral"
-                 }
+                 },
+                 batch_size = 32
                  ):
         self.path = path
         self.path_to_standardize_audio_data = path_to_standardize_audio_data
@@ -57,6 +66,7 @@ class CreamData:
         self.train_set = None
         self.test_set = None
         self.validation_set  = None
+        self.BATCH_SIZE = batch_size
 
     def get_emotion(self, filename):
         filename = filename.split("_")
@@ -92,11 +102,12 @@ class CreamData:
                     y_padded = y[:target_samples]
                 
                 sf.write(output_file,y_padded,sr)
+            print(f"Standard {output_file}")
+            print(f'{y_padded.shape}')
             
 
     def make_dataset(self):
         dir_list = os.listdir(self.path_to_standardize_audio_data)
-        print(dir_list)
         dir_list.sort()
 
         ids = []
@@ -128,10 +139,7 @@ class CreamData:
 
         log_mel = librosa.power_to_db(mel_spec, ref = np.max)
 
-        # mozda normalizacija
-
         return log_mel
-
     
     def apply_all_time_augmentations(self,y):
 
@@ -165,48 +173,42 @@ class CreamData:
     def spec_augment(self,spectrogram, num_time_masks=2, num_freq_masks=2, max_time_warp=80, T=100, F=20):
 
         spec_tensor = tf.convert_to_tensor(spectrogram[np.newaxis, :, :, np.newaxis], dtype=tf.float32)
-            # Get the shape of the spectrogram
         n_freq = spectrogram.shape[0]
         n_time = spectrogram.shape[1]
 
-            # Generate random warp parameters
-        source_control_point_locations = tf.random.uniform((1, 4, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
-        dest_control_point_locations = tf.random.uniform((1, 4, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
-            # Apply sparse image warp
-        warped_spec_tensor = 0#tfa.image.sparse_image_warp(
-        #                    spec_tensor,
-        #                    source_control_point_locations=source_control_point_locations,
-        #                    dest_control_point_locations=dest_control_point_locations,
-        #                   num_boundary_points=2)
+        source_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
+        dest_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
+        # Apply sparse image warp
+        warped_spec_tensor, _= tfa.image.sparse_image_warp(
+                spec_tensor,
+                source_control_point_locations=source_control_point_locations,
+                dest_control_point_locations=dest_control_point_locations,
+               num_boundary_points=2
+            )
 
-        image, _ = warped_spec_tensor
-        warped_mel = tf.squeeze(image,axis = 0)[:,:,0].numpy()
-
-        augmented_spec = warped_mel
-            # Apply time masks
+        augmented_spec = tf.squeeze(warped_spec_tensor,axis = 0)[:,:,0].numpy()
+        
+        
         for _ in range(num_time_masks):
             mask_duration = np.random.randint(0, T)
             mask_start = np.random.randint(0, n_time - mask_duration - 1)
             augmented_spec[:, mask_start:mask_start + mask_duration] = 0
 
-            # Apply frequency masks
         for _ in range(num_freq_masks):
             mask_width = np.random.randint(0, F)
             mask_start = np.random.randint(0, n_freq - mask_width - 1)
             augmented_spec[mask_start:mask_start + mask_width, :] = 0
 
+        clear_memory([warped_spec_tensor])
+        tf.keras.backend.clear_session()
         return augmented_spec
 
-
-    def extract_features(self):
-        unprocess_data = self.data.copy()
-
-        process_data = []
-        for sound in unprocess_data['path']:
-            y,sr = librosa.load(sound)
-            y = self.apply_all_time_augmentations(y)
-            mel_spec = self.compute_mel_spectrogram(y,sr)
-            final_spec = self.spec_augment(
+    def convert_to_final_spec(self,sounds_path):
+        y,sr = librosa.load(sounds_path)
+        y = self.apply_all_time_augmentations(y)
+        mel_spec = self.compute_mel_spectrogram(y,sr)
+        
+        final_spec = self.spec_augment(
                 mel_spec,
                 num_time_masks = self.n_mask_time_SpecAugmentation,
                 num_freq_masks = self.n_mask_freq_SpecAugmentation,
@@ -214,24 +216,47 @@ class CreamData:
                 T = self.T_SpecAugmentation,
                 F = self.F_SpecAugmentation
             )
-            process_data.append(final_spec)
-            print(np.array(process_data).shape)
-        np.save('extracted_features_matrices.npy', np.array(process_data))
-        self.processed_data =  unprocess_data
-        self.processed_data.to_csv('extracted_features.csv', index=False)
+       
+        return final_spec
+
+    def extract_features_with_labels(self, batch_data, output_path):
+        process_data = []
+        lables = []
+        for path, label in zip(batch_data['path'],batch_data['emotion']):
+            
+            d = self.convert_to_final_spec(path)
+            process_data.append(self.convert_to_final_spec(path))
+            lables.append(label)
+
+        np.savez(output_path, features = np.array(process_data), labels= np.array(lables))
+
+
+    def process_and_save_features(self, data_sets, batch_size, output_dir):
+        num_batches = len(data_sets) // batch_size + (1 if len(data_sets) % batch_size != 0 else 0)
+
+        if  not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        if 'train' in output_dir:
+            for batch in range(num_batches):
+                start = batch * batch_size
+                end = start + batch_size
+                batch_data = data_sets[start:end]
+                output_path = os.path.join(output_dir, f'batch_{batch}')
+                print(f'Train output : {output_path}')
+                self.extract_features_with_labels(batch_data, output_path)
+        elif 'validation' in output_dir:
+            output_path = os.path.join(output_dir,'validation.npz')
+            self.extract_features_with_labels(batch_data,output_path)
+        else:
+            output_path = os.path.join(output_dir,'test.npz')
+            self.extract_features_with_labels(batch_data,output_path)
+
+    def train_test_split(self):
         
-
-
-    def train_test_split(self, processed_data):
-        '''
-            For now we'll have random choice for now
-        ''' 
-        # self.standardize_audio_duration()
-        # self.make_dataset()
-        # self.extract_features()
+        self.make_dataset()
         female_size = len(self.female)
         male_size = len(self.male)
-        data = processed_data.copy()
+        data = self.data.copy()
         test_female = random.sample(self.female, int(self.test_size * female_size))
         remaining = list(set(self.female) - set(test_female))
         validation_female = random.sample(remaining,int(self.validation_size * female_size))
@@ -251,25 +276,18 @@ class CreamData:
         self.test_set = test.copy()
         self.train_set = train.copy()
         self.validation_set = validation.copy()
-        return train, validation, test
+
+        self.process_and_save_features(self.train_set,self.BATCH_SIZE,'batches/train')
+        self.process_and_save_features(self.validation_set,len(self.validation_set),'batches/validation')
+        self.process_and_save_features(self.test_set, len(self.test_set), 'batches/test')
+
+
+    def create_data_loader(batch_files, batch_size, shuffle= True):
+        dataset = CreamTorchData(batch_files)
+        return DataLoader(dataset, batch_size=batch_size,shuffle=shuffle,num_workers=2)
+    
         
 
 
 
-        
-    # def print_confusion_matrix(confusion_matrix, class_names, figsize = (10,7), fontsize = 10):
-
-    #     df_cm = pd.DataFrame(
-    #         confusion_matrix, index =class_names, columns = class_names
-    #     )
-    #     fig = plt.figure(figsize=figsize)
-
-    #     try:
-    #         heatmap = sns.heatmap(df_cm, annt = True, fmt = "d")
-    #     except ValueError:
-    #         raise ValueError("Confusion matrix must be right")
-
-    #     heatmap.yaxis.set_ticklabels(heatmap.yaxis.get_ticklabels(), rotation=0, ha='right', fontsize=fontsize)
-    #     heatmap.xaxis.set_ticklabels(heatmap.xaxis.get_ticklabels(), rotation=45, ha='right', fontsize=fontsize)
-    #     plt.ylabel('True label')
-    #     plt.xlabel('Predicted label')
+    

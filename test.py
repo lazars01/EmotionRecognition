@@ -1,8 +1,6 @@
 import os
 import pandas as pd
 import numpy as np
-import librosa
-import matplotlib.pyplot as plt
 import librosa.display
 import soundfile as sf
 import random
@@ -18,12 +16,13 @@ import torch.nn.functional as F
 
 import preprocessing_CREMA as prep
 
-
+# Ids for  dataset
 female_ids = [1002,1003,1004,1006,1007,1008,1009,1010,1012,1013,1018,1020,1021,
               1024,1025,1028,1029,1030,1037,1043,1046,1047,1049,1052,1053,1054,
               1055,1056,1058,1060,1061,1063,1072,1073,1074,1075,1076,1078,1079,
               1082,1084,1089,1091]
 male_ids = list(set(list(range(1001,1092))) - set(female_ids))
+
 
 creamData = prep.CreamData(
     path = 'data/CREAM-D_wav/AudioWAV/',
@@ -106,7 +105,7 @@ optimizer = optim.Adam(model.parameters())
 criterion = nn.CrossEntropyLoss()
 
 X_train = X_train.reshape(len(X_train), 1, 128, 1379)
-train_loader = get_data_loader(X_train, y_train, batch_size=6, shuffle=False)
+train_loader = get_data_loader(X_train, y_train, batch_size=8, shuffle=False)
 
 def train_classification(model, criterion, optimizer, number_of_epochs, train_loader):
   losses = []
