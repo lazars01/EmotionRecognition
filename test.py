@@ -1,20 +1,16 @@
 import os
 import pandas as pd
 import numpy as np
-import librosa.display
-import soundfile as sf
-import random
-import tensorflow as tf
 
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset, Subset, random_split
-from torchvision import datasets, transforms
-from torch.utils.data.sampler import SubsetRandomSampler
-import torch.nn.functional as F
+from torch.utils.data import DataLoader, TensorDataset
 
+from model import ERecogClassifier
 import preprocessing_CREMA as prep
+from custom_dataset import CreamTorchData
 
 # Ids for  dataset
 female_ids = [1002,1003,1004,1006,1007,1008,1009,1010,1012,1013,1018,1020,1021,
@@ -31,112 +27,91 @@ creamData = prep.CreamData(
     path_to_standardize_audio_data='ProcessedData',
 )
 
-data = pd.read_csv('extracted_features.csv')
-loaded_matrices = np.load('extracted_features_matrices.npy')
-print(loaded_matrices.shape)
 
-data.drop('X', axis=1, inplace=True)
-data_map = {path : matrix for path in data['path'] for matrix in loaded_matrices}
-print(len(data_map))
+def create_data_loader(batch_files, batch_size, shuffle= True):
+    dataset = CreamTorchData(batch_files)
+    return DataLoader(dataset, batch_size=batch_size,shuffle=shuffle,num_workers=2)
 
-y_train, y_validation, y_test = creamData.train_test_split(data)
-print(len(y_train), len(y_validation), len(y_test))
-
-def get_data_loader(X_data, y_data, batch_size, shuffle):
-  y_data = pd.Series(y_data)
-  X_tensor = torch.FloatTensor(X_data)
-  if isinstance(y_data, pd.Series):
-    y_data = y_data.values
-  y_tensor = torch.LongTensor(y_data)
-  dataset = TensorDataset(X_tensor, y_tensor)
-  return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
-
-X_train = []
-X_validation = []
-X_test = []
-
-for path in y_train['path']:
-   X_train.append(data_map[path])
-
-for path in y_validation['path']:
-   X_validation.append(data_map[path])
-
-for path in y_test['path']:
-   X_test.append(data_map[path])
-
-X_train = np.array(X_train)
-X_validation = np.array(X_validation)
-X_test = np.array(X_test)
-
-y_train = pd.Series(y_train['emotion'])
-y_validation = pd.Series(y_validation['emotion'])
-y_test = pd.Series(y_test['emotion'])
-
-print(y_train.value_counts())
-print(len(y_train), len(y_validation), len(y_test))
 
 emotion_map = {"angry" : 0, "disgust" : 1, "fear" : 2, "happy" : 3, "sad" : 4, "neutral" : 5}
 
-y_train = y_train.apply(lambda x : emotion_map[x])
-y_validation = y_validation.apply(lambda x : emotion_map[x])
-y_test = y_test.apply(lambda x : emotion_map[x])
 
-class ERecogClassifier(nn.Module):
-  def __init__(self, num_classes):
-    super(ERecogClassifier, self).__init__()
-    self.conv1 = nn.Conv2d(in_channels=1, out_channels=4, kernel_size=3, stride=1)
-    self.fc1 = nn.Linear(in_features=4*126*1377, out_features=128)
-    self.fc2 = nn.Linear(in_features=128, out_features=num_classes)
-
-  def forward(self, x):
-    x = self.conv1(x)
-    x = F.relu(x)
-    x = torch.flatten(x, 1)
-    x = self.fc1(x)
-    x = F.relu(x)
-    x = self.fc2(x)
-    output = F.log_softmax(x, dim=1)
-
-    return output
     
-num_classes = data['emotion'].nunique()
+num_classes = len(emotion_map)
 model = ERecogClassifier(num_classes=num_classes)
 optimizer = optim.Adam(model.parameters())
 criterion = nn.CrossEntropyLoss()
+scaler = torch.cuda.amp.GradScaler()
 
-X_train = X_train.reshape(len(X_train), 1, 128, 1379)
-train_loader = get_data_loader(X_train, y_train, batch_size=8, shuffle=False)
+train_loader = create_data_loader('batches/train', batch_size=32, shuffle=True)
+val_loader = create_data_loader('batches/validation', batch_size=32, shuffle=False)
+test_loader = create_data_loader('batches/test', batch_size=32, shuffle=False)
 
-def train_classification(model, criterion, optimizer, number_of_epochs, train_loader):
-  losses = []
-  accuracies = []
+def train_classification(model, criterion, optimizer, number_of_epochs, train_loader, val_loader, scaler):
+    train_losses, val_losses = [], []
+    train_accuracies, val_accuracies = [], []
 
-  for epoch in range(number_of_epochs):
-      running_loss = 0.0
-      correct = 0
-      total = 0
+    for epoch in range(number_of_epochs):
+        model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+        
+        for inputs, labels in train_loader:
 
-      for inputs, labels in train_loader:
-          optimizer.zero_grad()
-          outputs = model(inputs)
-          loss = criterion(outputs.squeeze(), labels)
-          loss.backward()
-          optimizer.step()
+            optimizer.zero_grad()
 
-          running_loss += loss.item()
+            with torch.cuda.amp.autocast():  # Use mixed precision
+                outputs = model(inputs)
+                loss = criterion(outputs.squeeze(), labels)
 
-          
-          predicted = torch.argmax(outputs, dim=1)
-            
-          correct += (predicted.squeeze() == labels).sum().item()
-          total += labels.size(0)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
-      epoch_loss = running_loss / len(train_loader)
-      epoch_accuracy = correct / total
-      losses.append(epoch_loss)
-      accuracies.append(epoch_accuracy)
-      print(f"Epoch [{epoch + 1}/{number_of_epochs}], Loss: {epoch_loss:.4f}, Accuracy: {epoch_accuracy:.4f}")
+            running_loss += loss.item()
+            print(f"Running Loss : {running_loss}")
 
-  return losses, accuracies
+            predicted = torch.argmax(outputs, dim=1)
+            correct += (predicted.squeeze() == labels).sum().item()
+            total += labels.size(0)
+
+        epoch_train_loss = running_loss / total
+        epoch_train_accuracy = correct / total
+        train_losses.append(epoch_train_loss)
+        train_accuracies.append(epoch_train_accuracy)
+        print(f"Epoch [{epoch + 1}/{number_of_epochs}], Train Loss: {epoch_train_loss:.4f}, Train Accuracy: {epoch_train_accuracy:.4f}")
+
+        #torch.cuda.empty_cache() mozda
+
+        model.eval()
+        val_running_loss = 0.0
+        val_correct = 0
+        val_total = 0
+
+        with torch.no_grad():
+            for val_inputs, val_labels in val_loader:
+
+                with torch.cuda.amp.autocast():
+                  val_outputs = model(val_inputs)
+                  val_loss = criterion(val_outputs.squeeze(), val_labels)
+                val_running_loss += val_loss.item()
+
+
+                val_predicted = torch.argmax(val_outputs, dim=1)
+                val_total += val_labels.size(0)
+                val_correct += (val_predicted.squeeze() == val_labels).sum().item()
+
+        epoch_val_loss = val_running_loss / len(val_loader)
+        epoch_val_accuracy = val_correct / val_total
+        val_losses.append(epoch_val_loss)
+        val_accuracies.append(epoch_val_accuracy)
+        print(f"Epoch [{epoch + 1}/{number_of_epochs}], Validation Loss: {epoch_val_loss:.4f}, Validation Accuracy: {epoch_val_accuracy:.4f}")
+
+
+        # Clear cache to free memory
+    torch.cuda.empty_cache()
+
+    return train_losses, train_accuracies, val_losses, val_accuracies
 
 train_losses, train_accuaracies = train_classification(model, criterion, optimizer, 10, train_loader)

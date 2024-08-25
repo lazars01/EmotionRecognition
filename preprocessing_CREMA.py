@@ -229,7 +229,7 @@ class CreamData:
             lables.append(label)
 
         np.savez(output_path, features = np.array(process_data), labels= np.array(lables))
-
+        clear_memory([process_data,lables])
 
     def process_and_save_features(self, data_sets, batch_size, output_dir):
         num_batches = len(data_sets) // batch_size + (1 if len(data_sets) % batch_size != 0 else 0)
@@ -282,9 +282,7 @@ class CreamData:
         self.process_and_save_features(self.test_set, len(self.test_set), 'batches/test')
 
 
-    def create_data_loader(batch_files, batch_size, shuffle= True):
-        dataset = CreamTorchData(batch_files)
-        return DataLoader(dataset, batch_size=batch_size,shuffle=shuffle,num_workers=2)
+
     
         
 
