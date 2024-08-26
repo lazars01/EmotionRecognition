@@ -237,6 +237,7 @@ class CreamData:
         if  not os.path.exists(output_dir):
             os.makedirs(output_dir)
         if 'train' in output_dir:
+            return
             for batch in range(num_batches):
                 start = batch * batch_size
                 end = start + batch_size
@@ -245,11 +246,11 @@ class CreamData:
                 print(f'Train output : {output_path}')
                 self.extract_features_with_labels(batch_data, output_path)
         elif 'validation' in output_dir:
-            output_path = os.path.join(output_dir,'validation.npz')
-            self.extract_features_with_labels(batch_data,output_path)
+            output_path = os.path.join(output_dir, 'validation')
+            self.extract_features_with_labels(data_sets,output_path)
         else:
-            output_path = os.path.join(output_dir,'test.npz')
-            self.extract_features_with_labels(batch_data,output_path)
+            output_path = os.path.join(output_dir, 'test')
+            self.extract_features_with_labels(data_sets,output_path)
 
     def train_test_split(self):
         

@@ -30,11 +30,15 @@ creamData = prep.CreamData(
 
 def create_data_loader(batch_files, batch_size, shuffle= True):
     dataset = CreamTorchData(batch_files)
-    return DataLoader(dataset, batch_size=batch_size,shuffle=shuffle,num_workers=2)
+    return DataLoader(dataset, batch_size=1,shuffle=shuffle,num_workers=2)
 
 
 emotion_map = {"angry" : 0, "disgust" : 1, "fear" : 2, "happy" : 3, "sad" : 4, "neutral" : 5}
 
+
+with np.load('batches/train/batch_0.npz') as data:
+            features = data['features']
+            labels = data['labels']
 
     
 num_classes = len(emotion_map)
@@ -58,8 +62,12 @@ def train_classification(model, criterion, optimizer, number_of_epochs, train_lo
         total = 0
         
         for inputs, labels in train_loader:
-
+            
+            
             optimizer.zero_grad()
+            print(f'SHAPE: {inputs.shape}')
+            print(inputs)
+            print(labels)
 
             with torch.cuda.amp.autocast():  # Use mixed precision
                 outputs = model(inputs)
@@ -114,4 +122,4 @@ def train_classification(model, criterion, optimizer, number_of_epochs, train_lo
 
     return train_losses, train_accuracies, val_losses, val_accuracies
 
-train_losses, train_accuaracies = train_classification(model, criterion, optimizer, 10, train_loader)
+train_losses, train_accuaracies = train_classification(model, criterion, optimizer, 10, train_loader, val_loader,scaler)
