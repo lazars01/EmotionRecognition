@@ -5,7 +5,6 @@ import numpy as np
 import preprocessing_CREMA as prep
 import cProfile
 import pstats
-from memory_profiler import profile
 
 # Ids for  dataset
 female_ids = [1002,1003,1004,1006,1007,1008,1009,1010,1012,1013,1018,1020,1021,
@@ -24,7 +23,7 @@ creamData = prep.CreamData(
 )
 
 
-#creamData.standardize_audio_duration()
+creamData.standardize_audio_duration()
 creamData.train_test_split()
 
 

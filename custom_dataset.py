@@ -29,8 +29,8 @@ class CreamTorchData(Dataset):
         with np.load(batch_file) as data:
             features = data['features']
             labels = data['labels']
-            print(f'Loading batch: {features.shape}')
             mapped_labels = np.array([self.emotion_map[label] for label in labels])
+            
 
         return torch.tensor(features,dtype=torch.float32), torch.tensor(mapped_labels,dtype=torch.int32)
     

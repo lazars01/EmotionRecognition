@@ -7,9 +7,8 @@ import librosa
 from matplotlib import pyplot as plt
 import gc
 import  tensorflow as tf
-import tensorflow_addons as tfa
+#import tensorflow_addons as tfa
 import time
-from memory_profiler import memory_usage
 from custom_dataset import CreamTorchData
 from torch.utils.data import DataLoader
 
@@ -170,54 +169,54 @@ class CreamData:
         y = augmentation_speed_and_pitch(y)
         return y
   
-    def spec_augment(self,spectrogram, num_time_masks=2, num_freq_masks=2, max_time_warp=80, T=100, F=20):
+    # def spec_augment(self,spectrogram, num_time_masks=2, num_freq_masks=2, max_time_warp=80, T=100, F=20):
 
-        spec_tensor = tf.convert_to_tensor(spectrogram[np.newaxis, :, :, np.newaxis], dtype=tf.float32)
-        n_freq = spectrogram.shape[0]
-        n_time = spectrogram.shape[1]
+    #     spec_tensor = tf.convert_to_tensor(spectrogram[np.newaxis, :, :, np.newaxis], dtype=tf.float32)
+    #     n_freq = spectrogram.shape[0]
+    #     n_time = spectrogram.shape[1]
 
-        source_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
-        dest_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
-        # Apply sparse image warp
-        warped_spec_tensor, _= tfa.image.sparse_image_warp(
-                spec_tensor,
-                source_control_point_locations=source_control_point_locations,
-                dest_control_point_locations=dest_control_point_locations,
-               num_boundary_points=2
-            )
+    #     source_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
+    #     dest_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
+    #     # Apply sparse image warp
+    #     warped_spec_tensor, _= tfa.image.sparse_image_warp(
+    #             spec_tensor,
+    #             source_control_point_locations=source_control_point_locations,
+    #             dest_control_point_locations=dest_control_point_locations,
+    #            num_boundary_points=2
+    #         )
 
-        augmented_spec = tf.squeeze(warped_spec_tensor,axis = 0)[:,:,0].numpy()
+    #     augmented_spec = tf.squeeze(warped_spec_tensor,axis = 0)[:,:,0].numpy()
         
         
-        for _ in range(num_time_masks):
-            mask_duration = np.random.randint(0, T)
-            mask_start = np.random.randint(0, n_time - mask_duration - 1)
-            augmented_spec[:, mask_start:mask_start + mask_duration] = 0
+    #     for _ in range(num_time_masks):
+    #         mask_duration = np.random.randint(0, T)
+    #         mask_start = np.random.randint(0, n_time - mask_duration - 1)
+    #         augmented_spec[:, mask_start:mask_start + mask_duration] = 0
 
-        for _ in range(num_freq_masks):
-            mask_width = np.random.randint(0, F)
-            mask_start = np.random.randint(0, n_freq - mask_width - 1)
-            augmented_spec[mask_start:mask_start + mask_width, :] = 0
+    #     for _ in range(num_freq_masks):
+    #         mask_width = np.random.randint(0, F)
+    #         mask_start = np.random.randint(0, n_freq - mask_width - 1)
+    #         augmented_spec[mask_start:mask_start + mask_width, :] = 0
 
-        clear_memory([warped_spec_tensor])
-        tf.keras.backend.clear_session()
-        return augmented_spec
+    #     clear_memory([warped_spec_tensor])
+    #     tf.keras.backend.clear_session()
+    #     return augmented_spec
 
-    def convert_to_final_spec(self,sounds_path):
+    def convert_to_final_spec(self, sounds_path):
         y,sr = librosa.load(sounds_path)
         y = self.apply_all_time_augmentations(y)
         mel_spec = self.compute_mel_spectrogram(y,sr)
         
-        final_spec = self.spec_augment(
-                mel_spec,
-                num_time_masks = self.n_mask_time_SpecAugmentation,
-                num_freq_masks = self.n_mask_freq_SpecAugmentation,
-                max_time_warp= self.max_time_warp_SpecAugmentation,
-                T = self.T_SpecAugmentation,
-                F = self.F_SpecAugmentation
-            )
+        # final_spec = self.spec_augment(
+        #         mel_spec,
+        #         num_time_masks = self.n_mask_time_SpecAugmentation,
+        #         num_freq_masks = self.n_mask_freq_SpecAugmentation,
+        #         max_time_warp= self.max_time_warp_SpecAugmentation,
+        #         T = self.T_SpecAugmentation,
+        #         F = self.F_SpecAugmentation
+        #     )
        
-        return final_spec
+        return mel_spec
 
     def extract_features_with_labels(self, batch_data, output_path):
         process_data = []
@@ -225,7 +224,8 @@ class CreamData:
         for path, label in zip(batch_data['path'],batch_data['emotion']):
             
             d = self.convert_to_final_spec(path)
-            process_data.append(self.convert_to_final_spec(path))
+            print(d.shape)
+            process_data.append(d)
             lables.append(label)
 
         np.savez(output_path, features = np.array(process_data), labels= np.array(lables))
@@ -237,7 +237,6 @@ class CreamData:
         if  not os.path.exists(output_dir):
             os.makedirs(output_dir)
         if 'train' in output_dir:
-            return
             for batch in range(num_batches):
                 start = batch * batch_size
                 end = start + batch_size
@@ -246,11 +245,21 @@ class CreamData:
                 print(f'Train output : {output_path}')
                 self.extract_features_with_labels(batch_data, output_path)
         elif 'validation' in output_dir:
-            output_path = os.path.join(output_dir, 'validation')
-            self.extract_features_with_labels(data_sets,output_path)
+            for batch in range(num_batches):
+                start = batch * batch_size
+                end = start + batch_size
+                batch_data = data_sets[start:end]
+                output_path = os.path.join(output_dir, f'batch_{batch}')
+                print(f'Validation output : {output_path}')
+                self.extract_features_with_labels(batch_data, output_path)
         else:
-            output_path = os.path.join(output_dir, 'test')
-            self.extract_features_with_labels(data_sets,output_path)
+            for batch in range(num_batches):
+                start = batch * batch_size
+                end = start + batch_size
+                batch_data = data_sets[start:end]
+                output_path = os.path.join(output_dir, f'batch_{batch}')
+                print(f'Test output : {output_path}')
+                self.extract_features_with_labels(batch_data, output_path)
 
     def train_test_split(self):
         
@@ -278,9 +287,9 @@ class CreamData:
         self.train_set = train.copy()
         self.validation_set = validation.copy()
 
-        self.process_and_save_features(self.train_set,self.BATCH_SIZE,'batches/train')
-        self.process_and_save_features(self.validation_set,len(self.validation_set),'batches/validation')
-        self.process_and_save_features(self.test_set, len(self.test_set), 'batches/test')
+        self.process_and_save_features(self.train_set, self.BATCH_SIZE,'batches/train')
+        self.process_and_save_features(self.validation_set, self.BATCH_SIZE,'batches/validation')
+        self.process_and_save_features(self.test_set, self.BATCH_SIZE, 'batches/test')
 
 
 
