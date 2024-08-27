@@ -3,13 +3,6 @@ from torch.utils.data import Dataset
 import numpy as np
 import os 
 
-def load_batch(batch_file):
-    with np.load(batch_file) as data:
-        features = data['features']
-        labels = data['labels']
-    
-    return features, labels
-
 class CreamTorchData(Dataset):
 
     def __init__(self, batch_files_path):

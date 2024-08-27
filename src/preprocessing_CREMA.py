@@ -4,15 +4,13 @@ import numpy as np
 import soundfile as sf
 import random
 import librosa
+
 import warnings
 warnings.filterwarnings('ignore')
-from matplotlib import pyplot as plt
+
 import gc
 import  tensorflow as tf
 import tensorflow_addons as tfa
-import time
-from custom_dataset import CreamTorchData
-from torch.utils.data import DataLoader
 from sklearn.preprocessing import minmax_scale
 
 random.seed(7)
@@ -247,30 +245,13 @@ class CreamData:
 
         if  not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        if 'train' in output_dir:
-            for batch in range(num_batches):
-                start = batch * batch_size
-                end = start + batch_size
-                batch_data = data_sets[start:end]
-                output_path = os.path.join(output_dir, f'batch_{batch}')
-                print(f'Train output : {output_path}')
-                self.extract_features_with_labels(batch_data, output_path)
-        elif 'validation' in output_dir:
-            for batch in range(num_batches):
-                start = batch * batch_size
-                end = start + batch_size
-                batch_data = data_sets[start:end]
-                output_path = os.path.join(output_dir, f'batch_{batch}')
-                print(f'Validation output : {output_path}')
-                self.extract_features_with_labels(batch_data, output_path)
-        else:
-            for batch in range(num_batches):
-                start = batch * batch_size
-                end = start + batch_size
-                batch_data = data_sets[start:end]
-                output_path = os.path.join(output_dir, f'batch_{batch}')
-                print(f'Test output : {output_path}')
-                self.extract_features_with_labels(batch_data, output_path)
+        for batch in range(num_batches):
+            start = batch * batch_size
+            end = start + batch_size
+            batch_data = data_sets[start:end]
+            output_path = os.path.join(output_dir, f'batch_{batch}')
+            print(f'{output_path}')
+            self.extract_features_with_labels(batch_data, output_path)
         clear_memory([])
 
     def train_test_split(self):
