@@ -4,13 +4,18 @@ import numpy as np
 import soundfile as sf
 import random
 import librosa
+import warnings
+warnings.filterwarnings('ignore')
 from matplotlib import pyplot as plt
 import gc
 import  tensorflow as tf
-#import tensorflow_addons as tfa
+import tensorflow_addons as tfa
 import time
 from custom_dataset import CreamTorchData
 from torch.utils.data import DataLoader
+from sklearn.preprocessing import minmax_scale
+
+random.seed(7)
 
 def clear_memory(variables):
     for var in variables:
@@ -24,6 +29,8 @@ class CreamData:
                  female,
                  male,
                  path_to_standardize_audio_data = None,
+                 spec_augmentation = True,
+                 standardize_audio = True,
                  window_len = 512,
                  hop_length = 64,
                  n_fft = 1024,
@@ -66,6 +73,8 @@ class CreamData:
         self.test_set = None
         self.validation_set  = None
         self.BATCH_SIZE = batch_size
+        self.want_augmentation = spec_augmentation
+        self.standardize_audio = standardize_audio
 
     def get_emotion(self, filename):
         filename = filename.split("_")
@@ -102,10 +111,9 @@ class CreamData:
                 
                 sf.write(output_file,y_padded,sr)
             print(f"Standard {output_file}")
-            print(f'{y_padded.shape}')
             
-
     def make_dataset(self):
+
         dir_list = os.listdir(self.path_to_standardize_audio_data)
         dir_list.sort()
 
@@ -169,54 +177,58 @@ class CreamData:
         y = augmentation_speed_and_pitch(y)
         return y
   
-    # def spec_augment(self,spectrogram, num_time_masks=2, num_freq_masks=2, max_time_warp=80, T=100, F=20):
+    def spec_augment(self,spectrogram, num_time_masks=2, num_freq_masks=2, max_time_warp=80, T=100, F=20):
 
-    #     spec_tensor = tf.convert_to_tensor(spectrogram[np.newaxis, :, :, np.newaxis], dtype=tf.float32)
-    #     n_freq = spectrogram.shape[0]
-    #     n_time = spectrogram.shape[1]
+        spec_tensor = tf.convert_to_tensor(spectrogram[np.newaxis, :, :, np.newaxis], dtype=tf.float32)
+        n_freq = spectrogram.shape[0]
+        n_time = spectrogram.shape[1]
 
-    #     source_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
-    #     dest_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
-    #     # Apply sparse image warp
-    #     warped_spec_tensor, _= tfa.image.sparse_image_warp(
-    #             spec_tensor,
-    #             source_control_point_locations=source_control_point_locations,
-    #             dest_control_point_locations=dest_control_point_locations,
-    #            num_boundary_points=2
-    #         )
+        source_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
+        dest_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
+        # Apply sparse image warp
+        warped_spec_tensor, _= tfa.image.sparse_image_warp(
+                spec_tensor,
+                source_control_point_locations=source_control_point_locations,
+                dest_control_point_locations=dest_control_point_locations,
+               num_boundary_points=2
+            )
 
-    #     augmented_spec = tf.squeeze(warped_spec_tensor,axis = 0)[:,:,0].numpy()
+        augmented_spec = tf.squeeze(warped_spec_tensor,axis = 0)[:,:,0].numpy()
         
         
-    #     for _ in range(num_time_masks):
-    #         mask_duration = np.random.randint(0, T)
-    #         mask_start = np.random.randint(0, n_time - mask_duration - 1)
-    #         augmented_spec[:, mask_start:mask_start + mask_duration] = 0
+        for _ in range(num_time_masks):
+            mask_duration = np.random.randint(0, T)
+            mask_start = np.random.randint(0, n_time - mask_duration - 1)
+            augmented_spec[:, mask_start:mask_start + mask_duration] = 0
 
-    #     for _ in range(num_freq_masks):
-    #         mask_width = np.random.randint(0, F)
-    #         mask_start = np.random.randint(0, n_freq - mask_width - 1)
-    #         augmented_spec[mask_start:mask_start + mask_width, :] = 0
+        for _ in range(num_freq_masks):
+            mask_width = np.random.randint(0, F)
+            mask_start = np.random.randint(0, n_freq - mask_width - 1)
+            augmented_spec[mask_start:mask_start + mask_width, :] = 0
 
-    #     clear_memory([warped_spec_tensor])
-    #     tf.keras.backend.clear_session()
-    #     return augmented_spec
+        clear_memory([warped_spec_tensor])
+        tf.keras.backend.clear_session()
+        return augmented_spec
 
     def convert_to_final_spec(self, sounds_path):
         y,sr = librosa.load(sounds_path)
         y = self.apply_all_time_augmentations(y)
         mel_spec = self.compute_mel_spectrogram(y,sr)
         
-        # final_spec = self.spec_augment(
-        #         mel_spec,
-        #         num_time_masks = self.n_mask_time_SpecAugmentation,
-        #         num_freq_masks = self.n_mask_freq_SpecAugmentation,
-        #         max_time_warp= self.max_time_warp_SpecAugmentation,
-        #         T = self.T_SpecAugmentation,
-        #         F = self.F_SpecAugmentation
-        #     )
-       
-        return mel_spec
+        if self.want_augmentation:
+            final_spec = self.spec_augment(
+                    mel_spec,
+                    num_time_masks = self.n_mask_time_SpecAugmentation,
+                    num_freq_masks = self.n_mask_freq_SpecAugmentation,
+                    max_time_warp= self.max_time_warp_SpecAugmentation,
+                    T = self.T_SpecAugmentation,
+                    F = self.F_SpecAugmentation
+                )
+        else:
+            return minmax_scale(mel_spec.flatten()).reshape(mel_spec.shape)
+        # Min/Max scaling 
+        final_spec = minmax_scale(final_spec.flatten()).reshape(final_spec.shape)
+        return final_spec
 
     def extract_features_with_labels(self, batch_data, output_path):
         process_data = []
@@ -224,7 +236,6 @@ class CreamData:
         for path, label in zip(batch_data['path'],batch_data['emotion']):
             
             d = self.convert_to_final_spec(path)
-            print(d.shape)
             process_data.append(d)
             lables.append(label)
 
@@ -260,10 +271,10 @@ class CreamData:
                 output_path = os.path.join(output_dir, f'batch_{batch}')
                 print(f'Test output : {output_path}')
                 self.extract_features_with_labels(batch_data, output_path)
+        clear_memory([])
 
     def train_test_split(self):
         
-        self.make_dataset()
         female_size = len(self.female)
         male_size = len(self.male)
         data = self.data.copy()
@@ -286,14 +297,35 @@ class CreamData:
         self.test_set = test.copy()
         self.train_set = train.copy()
         self.validation_set = validation.copy()
-
-        self.process_and_save_features(self.train_set, self.BATCH_SIZE,'batches/train')
-        self.process_and_save_features(self.validation_set, self.BATCH_SIZE,'batches/validation')
-        self.process_and_save_features(self.test_set, self.BATCH_SIZE, 'batches/test')
-
-
-
+        clear_memory([test,train,validation])
     
+    def process_data(self):
+
+        if self.standardize_audio:
+            self.standardize_audio_duration()
+        
+        print('Making Dataframe')
+        self.make_dataset()
+        print('Spliting data')
+        self.train_test_split()
+
+        print(f'Want augmentation: {self.want_augmentation}')
+        if self.want_augmentation:
+            print('Processing training data')
+            self.process_and_save_features(self.train_set,self.BATCH_SIZE,'batches_augment/train')
+            print('Processing validation data')
+            self.process_and_save_features(self.validation_set, self.BATCH_SIZE, 'batches_augment/validation')
+            print('Processing test data')
+            self.process_and_save_features(self.test_set, self.BATCH_SIZE, 'batches_augment/test')
+        else:
+            print('Processing training data')
+            self.process_and_save_features(self.train_set,self.BATCH_SIZE,'batches/train')
+            print('Processing validation data')
+            self.process_and_save_features(self.validation_set, self.BATCH_SIZE, 'batches/validation')
+            print('Processing test data')
+            self.process_and_save_features(self.test_set, self.BATCH_SIZE, 'batches/test')
+
+
         
 
 

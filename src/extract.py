@@ -1,10 +1,5 @@
-import os
-import pandas as pd
-import numpy as np
-
 import preprocessing_CREMA as prep
-import cProfile
-import pstats
+
 
 # Ids for  dataset
 female_ids = [1002,1003,1004,1006,1007,1008,1009,1010,1012,1013,1018,1020,1021,
@@ -16,18 +11,23 @@ male_ids = list(set(list(range(1001,1092))) - set(female_ids))
 
 
 creamData = prep.CreamData(
-    path = 'data/CREAM-D_wav/AudioWAV/',
+    path = '../data/CREAM-D_wav/AudioWAV/',
     female = female_ids,
     male = male_ids,
     path_to_standardize_audio_data='ProcessedData',
+    spec_augmentation=False,
+    standardize_audio=False
 )
 
+creamData.process_data()
 
-creamData.standardize_audio_duration()
-creamData.train_test_split()
+creamDataAugment = prep.CreamData(
+    path = '../data/CREAM-D_wav/AudioWAV/',
+    female = female_ids,
+    male = male_ids,
+    path_to_standardize_audio_data='ProcessedData',
+    spec_augmentation= True,
+    standardize_audio= False
+)
 
-
-
-# data = pd.read_csv('extracted_features.csv')
-# loaded_matrices = np.load('extracted_features_matrices.npy')
-# print(loaded_matrices.shape)
+creamDataAugment.process_data()
