@@ -16,6 +16,8 @@ tensorflow-addons = "^0.22.0"
 tensorflow = "2.14.0"
 numpy = "^1.23.5"
 scikit-learn = "^1.5.1"
+seaborn = "^0.13.2"
+jupyter = "^1.0.0"
 
 [build-system]
 requires = ["poetry-core"]

@@ -26,7 +26,7 @@ def plot_classification(train_loss, train_accuracy, val_loss, val_accuracy, labe
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.plot(epochs, train_loss, label= label + ' Training Loss')
-    if val_loss:
+    if len(val_loss):
         plt.plot(epochs, val_loss, label= label + ' Validation Loss')
 
     plt.legend()
@@ -37,7 +37,7 @@ def plot_classification(train_loss, train_accuracy, val_loss, val_accuracy, labe
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy')
     plt.plot(epochs, train_accuracy, label= label + ' Training Accuracy')
-    if val_accuracy:
+    if len(val_accuracy):
         plt.plot(epochs, val_accuracy, label= label + ' Validation Accuracy')
     plt.legend()
 
@@ -73,6 +73,7 @@ def train_classification(model, criterion, optimizer, number_of_epochs, train_lo
                 predicted = torch.argmax(outputs, dim=1)
                 correct += (predicted.squeeze() == labels).sum().item()
                 total += labels.size(0)
+                print(f'Running loss: {running_loss}')
 
         epoch_train_loss = running_loss / total
         epoch_train_accuracy = correct / total
@@ -107,7 +108,7 @@ def train_classification(model, criterion, optimizer, number_of_epochs, train_lo
                     val_total += val_labels.size(0)
                     val_correct += (val_predicted.squeeze() == val_labels).sum().item()
 
-            epoch_val_loss = val_running_loss / len(val_loader)
+            epoch_val_loss = val_running_loss / val_total
             epoch_val_accuracy = val_correct / val_total
             val_losses.append(epoch_val_loss)
             val_accuracies.append(epoch_val_accuracy)

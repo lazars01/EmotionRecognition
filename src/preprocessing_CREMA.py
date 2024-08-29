@@ -62,9 +62,9 @@ class CreamData:
         self.n_mels = n_mels
         self.n_mask_time_SpecAugmentation = 1
         self.n_mask_freq_SpecAugmentation = 1
-        self.max_time_warp_SpecAugmentation = 80
-        self.T_SpecAugmentation = 80
-        self.F_SpecAugmentation = 15
+        self.max_time_warp_SpecAugmentation = 20
+        self.T_SpecAugmentation = 100
+        self.F_SpecAugmentation = 20
         self.data = None
         self.processed_data = None
         self.train_set = None
@@ -146,67 +146,73 @@ class CreamData:
 
         return log_mel
     
+    def augmentation_noise(self, sound, noise_val):
+
+        noise_amp = noise_val * np.random.uniform() * np.random.normal(size= sound.shape[0])
+        sound = sound.astype('float64') + noise_amp * np.random.normal(size = sound.shape[0])
+        return sound
+    
+    def augmentation_shift(self,sound):
+            
+        shift_range = int(np.random.uniform(low = -5, high = 5) * 1000)
+
+        return np.roll(sound, shift_range)
+    
+    def augmentation_speed_and_pitch(self, sound):
+
+        length_change = np.random.uniform(low = 0.9, high = 1.1)
+        speed_frac = 1.05 / length_change
+
+        tmp = np.interp(np.arange(0, len(sound), speed_frac), np.arange(0, len(sound)), sound)
+        min_len = min(sound.shape[0], tmp.shape[0])
+        sound *= 0
+        sound[0: min_len] = tmp[0:min_len]
+        return sound
+    
     def apply_all_time_augmentations(self,y):
 
-        def augmentation_noise(sound, noise_val):
-
-            noise_amp = noise_val * np.random.uniform() * np.random.normal(size= sound.shape[0])
-            sound = sound.astype('float64') + noise_amp * np.random.normal(size = sound.shape[0])
-            return sound
-
-        def augmentation_shift(sound):
-            
-            shift_range = int(np.random.uniform(low = -5, high = 5) * 1000)
-            return np.roll(sound, shift_range)
-
-        def augmentation_speed_and_pitch(sound):
-
-            length_change = np.random.uniform(low = 0.8, high = 1)
-            speed_frac = 1.2 / length_change
-
-            tmp = np.interp(np.arange(0, len(sound), speed_frac), np.arange(0, len(sound)), sound)
-            min_len = min(sound.shape[0], tmp.shape[0])
-            sound *= 0
-            sound[0: min_len] = tmp[0:min_len]
-            return sound
-    
-        y = augmentation_noise(y,noise_val = 0.05)
-        y = augmentation_shift(y)
-        y = augmentation_speed_and_pitch(y)
+        y = self.augmentation_noise(y,noise_val = 0.0005)
+        y = self.augmentation_shift(y)
+        y = self.augmentation_speed_and_pitch(y)
         return y
   
     def spec_augment(self,spectrogram, num_time_masks=2, num_freq_masks=2, max_time_warp=80, T=100, F=20):
 
         spec_tensor = tf.convert_to_tensor(spectrogram[np.newaxis, :, :, np.newaxis], dtype=tf.float32)
+            # Get the shape of the spectrogram
         n_freq = spectrogram.shape[0]
         n_time = spectrogram.shape[1]
 
-        source_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
-        dest_control_point_locations = tf.random.uniform((1, 2, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
-        # Apply sparse image warp
-        warped_spec_tensor, _= tfa.image.sparse_image_warp(
-                spec_tensor,
-                source_control_point_locations=source_control_point_locations,
-                dest_control_point_locations=dest_control_point_locations,
-               num_boundary_points=2
-            )
 
-        augmented_spec = tf.squeeze(warped_spec_tensor,axis = 0)[:,:,0].numpy()
-        
-        
+        data = self.make_dataset()
+            # Generate random warp parameters
+        source_control_point_locations = tf.random.uniform((1, 4, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
+        dest_control_point_locations = tf.random.uniform((1, 4, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
+            # Apply sparse image warp
+        warped_spec_tensor = tfa.image.sparse_image_warp(
+                            spec_tensor,
+                            source_control_point_locations=source_control_point_locations,
+                            dest_control_point_locations=dest_control_point_locations,
+                            num_boundary_points=2)
+
+        image, _ = warped_spec_tensor
+        warped_mel = tf.squeeze(image,axis = 0)[:,:,0].numpy()
+
+        augmented_spec = warped_mel
+            # Apply time masks
         for _ in range(num_time_masks):
             mask_duration = np.random.randint(0, T)
             mask_start = np.random.randint(0, n_time - mask_duration - 1)
             augmented_spec[:, mask_start:mask_start + mask_duration] = 0
 
+            # Apply frequency masks
         for _ in range(num_freq_masks):
             mask_width = np.random.randint(0, F)
             mask_start = np.random.randint(0, n_freq - mask_width - 1)
             augmented_spec[mask_start:mask_start + mask_width, :] = 0
 
-        clear_memory([warped_spec_tensor])
-        tf.keras.backend.clear_session()
         return augmented_spec
+
 
     def convert_to_final_spec(self, sounds_path):
         y,sr = librosa.load(sounds_path)
@@ -222,11 +228,9 @@ class CreamData:
                     T = self.T_SpecAugmentation,
                     F = self.F_SpecAugmentation
                 )
+            return minmax_scale(final_spec.flatten()).reshape(final_spec.shape)
         else:
             return minmax_scale(mel_spec.flatten()).reshape(mel_spec.shape)
-        # Min/Max scaling 
-        final_spec = minmax_scale(final_spec.flatten()).reshape(final_spec.shape)
-        return final_spec
 
     def extract_features_with_labels(self, batch_data, output_path):
         process_data = []
