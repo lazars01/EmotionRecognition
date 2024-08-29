@@ -27,7 +27,7 @@ class ERecogClassifier(nn.Module):
         # 128 x 1379
         x = self.conv1(x)
         # 126 x 1377
-        #x = self.batch_norm1(x)
+        x = self.batch_norm1(x)
         x = F.relu(x)
         x = F.pad(x, (0, 1, 0, 0), mode='constant', value=0)
         # 126 x 1378
@@ -38,7 +38,7 @@ class ERecogClassifier(nn.Module):
 
         x = self.conv2(x)
         # 61 x 687
-        #x = self.batch_norm2(x)
+        x = self.batch_norm2(x)
         x = F.relu(x)
         x = F.pad(x, (0, 1, 0, 1), mode='constant', value=0)
         # 62 x 688
@@ -49,7 +49,7 @@ class ERecogClassifier(nn.Module):
 
         x = self.conv3(x)
         # 29 x 342
-        #x = self.batch_norm3(x)
+        x = self.batch_norm3(x)
         x = F.relu(x)
         x = F.pad(x, (0, 1, 0, 0), mode='constant', value=0)
         x = self.pool1(x)
@@ -59,7 +59,7 @@ class ERecogClassifier(nn.Module):
 
         x = self.conv4(x)
         # 13 x 169
-       #x = self.batch_norm4(x)
+        x = self.batch_norm4(x)
         x = F.relu(x)
         x = F.pad(x, (0, 1, 0, 1), mode='constant', value=0)
         # 14 x 170
