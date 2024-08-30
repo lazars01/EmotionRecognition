@@ -27,8 +27,6 @@ class CreamData:
                  female,
                  male,
                  path_to_standardize_audio_data = None,
-                 spec_augmentation = True,
-                 normal_augmentation = True,
                  standardize_audio = True,
                  window_len = 512,
                  hop_length = 64,
@@ -72,8 +70,6 @@ class CreamData:
         self.test_set = None
         self.validation_set  = None
         self.BATCH_SIZE = batch_size
-        self.SpecAugmentIndicator = spec_augmentation
-        self.NormalAugmentIndicator = normal_augmentation
         self.standardize_audio = standardize_audio
 
     def get_emotion(self, filename):
@@ -216,44 +212,67 @@ class CreamData:
         return augmented_spec
 
 
-    def convert_to_final_spec(self, sounds_path, training):
+    def get_default_mel_spec(self, sounds_path):
         y,sr = librosa.load(sounds_path)
+        mel = self.compute_mel_spectrogram(y,sr)
+        return minmax_scale(mel.flatten()).reshape(mel.shape)
+    
+    def get_augment_mel_spec(self, sounds_path):
+        y,sr = librosa.load(sounds_path)
+        y = self.apply_all_time_augmentations(y)
+        mel = self.compute_mel_spectrogram(y,sr)
+        return minmax_scale(mel.flatten()).reshape(mel.shape)
+    
+    def get_spec_augment_mel_spec(self, sounds_path):
+        y,sr = librosa.load(sounds_path)
+        y = self.apply_all_time_augmentations(y)
+        mel_spec = self.compute_mel_spectrogram(y,sr)
+        final_spec = self.spec_augment(
+            mel_spec,
+            num_time_masks = self.n_mask_time_SpecAugmentation,
+            num_freq_masks = self.n_mask_freq_SpecAugmentation,
+            max_time_warp= self.max_time_warp_SpecAugmentation,
+            T = self.T_SpecAugmentation,
+            F = self.F_SpecAugmentation
+        )
+        return minmax_scale(final_spec.flatten()).reshape(final_spec.shape)
 
-        if (self.NormalAugmentIndicator== False and self.SpecAugmentIndicator== False) or training == False:
-            print(f'adding for  validation or testing mel or normal training')
-            mel = self.compute_mel_spectrogram(y,sr)
-            return minmax_scale(mel.flatten()).reshape(mel.shape)
-        
-        if self.NormalAugmentIndicator and self.SpecAugmentIndicator == False:
-            print(f'Basic Time Augmentation')
-            y = self.apply_all_time_augmentations(y)
-            mel = self.compute_mel_spectrogram(y,sr)
-            return minmax_scale(mel.flatten()).reshape(mel.shape)
-        if self.SpecAugmentIndicator:
-            print(f'Spec augmentation')
-            y = self.apply_all_time_augmentations(y)
-            mel_spec = self.compute_mel_spectrogram(y,sr)
-            final_spec = self.spec_augment(
-                    mel_spec,
-                    num_time_masks = self.n_mask_time_SpecAugmentation,
-                    num_freq_masks = self.n_mask_freq_SpecAugmentation,
-                    max_time_warp= self.max_time_warp_SpecAugmentation,
-                    T = self.T_SpecAugmentation,
-                    F = self.F_SpecAugmentation
-                )
-            return minmax_scale(final_spec.flatten()).reshape(final_spec.shape)
+    
 
-    def extract_features_with_labels(self, batch_data, output_path, training):
+    def extract_features_with_labels(self, batch_data, output_path, training, batch):
         process_data = []
         lables = []
         for path, label in zip(batch_data['path'],batch_data['emotion']):
 
-            mel = self.convert_to_final_spec(path, training)
+            mel = self.get_default_mel_spec(path)
             process_data.append(mel)
             lables.append(label)
 
         np.savez(output_path, features = np.array(process_data), labels= np.array(lables))
         clear_memory([process_data,lables])
+
+        if training:
+            augmented_paths = ['batches/train_augment', 'batches/train_spec_augment']
+            for dir_path in augmented_paths:
+                if  not os.path.exists(dir_path):
+                    os.makedirs(dir_path)
+                process_data = []
+                lables = []
+                for path, label in zip(batch_data['path'],batch_data['emotion']):
+
+                    if dir_path == 'batches/train_augment':
+                        mel = self.get_augment_mel_spec(path)
+                    else:
+                        mel = self.get_spec_augment_mel_spec(path)
+                    process_data.append(mel)
+                    lables.append(label)
+
+                dir_path = os.path.join(dir_path, f'batch_{batch}')
+                np.savez(dir_path, features = np.array(process_data), labels= np.array(lables))
+                clear_memory([process_data,lables])
+                
+
+
 
     def process_and_save_features(self, data_sets, batch_size, output_dir, training = False):
         num_batches = len(data_sets) // batch_size + (1 if len(data_sets) % batch_size != 0 else 0)
@@ -266,7 +285,7 @@ class CreamData:
             batch_data = data_sets[start:end]
             output_path = os.path.join(output_dir, f'batch_{batch}')
             print(f'{output_path}')
-            self.extract_features_with_labels(batch_data, output_path, training)
+            self.extract_features_with_labels(batch_data, output_path, training, batch)
         clear_memory([])
 
     def train_test_split(self):
@@ -305,20 +324,9 @@ class CreamData:
         print('Spliting data')
         self.train_test_split()
 
-        if self.NormalAugmentIndicator and self.SpecAugmentIndicator == False:
-            print('Processing training data')
-            self.process_and_save_features(self.train_set,self.BATCH_SIZE,'batches/train_normal',True)
-
-        if self.SpecAugmentIndicator and self.NormalAugmentIndicator:
-            print('Processing training  data')
-            self.process_and_save_features(self.train_set,self.BATCH_SIZE,'batches_augment/train_spec',True)
-        else:
-            print('Processing training data')
-            self.process_and_save_features(self.train_set,self.BATCH_SIZE,'batches/train',True)
-
-        print('Processing validation data')
+       
+        self.process_and_save_features(self.train_set,self.BATCH_SIZE,'batches/train',True)
         self.process_and_save_features(self.validation_set, self.BATCH_SIZE, 'batches/validation')
-        print('Processing test data')
         self.process_and_save_features(self.test_set, self.BATCH_SIZE, 'batches/test')
 
 
