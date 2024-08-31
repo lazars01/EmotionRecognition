@@ -9,43 +9,35 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 
+
+train_loader = utils.create_data_loader(['../batches/train'], batch_size=1, shuffle=True)
+train_augment_loader = utils.create_data_loader(['../batches/train_augment', '../batches/train'], batch_size=1, shuffle=True)
+train_spec_augment_loader = utils.create_data_loader(['../batches/train_spec_augment','../batches/train'], batch_size = 1, shuffle=True)
+
+
+loaders = [ train_loader,train_augment_loader, train_spec_augment_loader]
+paths = ['train','train_augment','train_spec_augment']
+
+
+val_loader = utils.create_data_loader(['../batches/validation'], batch_size=1, shuffle=False)
 num_classes = 6
-model = ERecogClassifier(num_classes=num_classes)
-optimizer = optim.Adam(model.parameters(), lr=5e-4)
-criterion = nn.CrossEntropyLoss()
 
-train_loader = utils.create_data_loader('../batches/train', batch_size=1, shuffle=True)
-val_loader = utils.create_data_loader('../batches/validation', batch_size=1, shuffle=False)
+for i, path in enumerate(paths):
+     
+     model = ERecogClassifier(num_classes=num_classes)
+     optimizer = optim.Adam(model.parameters(), lr=5e-4)
+     criterion = nn.CrossEntropyLoss()
 
-train_loader_augment = utils.create_data_loader('../batches_augment/train', batch_size=1, shuffle=True)
-val_loader_augment = utils.create_data_loader('../batches_augment/validation', batch_size=1, shuffle=False)
+     loader = loaders[i]
+     train_losses, train_accuracies, val_losses, val_accuracies = utils.train_classification(model, criterion, optimizer, 50, [loader], val_loader)
 
-train_losses, train_accuracies, val_losses, val_accuracies = utils.train_classification(model, criterion, optimizer, 50, [train_loader], val_loader)
+     os.makedirs('models',exist_ok=True)
+     with open(f'models/{path}.model.pickle', 'wb') as model_file:
+          pickle.dump(model, model_file)
 
-os.makedirs('models', exist_ok=True)
+     os.makedirs('results', exist_ok=True)
+     np.save(f'results/{path}_loss', train_losses)
+     np.save(f'results/{path}_accuracies', train_accuracies)
+     np.save(f'results/{path}_val_loss', val_losses)
+     np.save(f'results/{path}_val_acc', val_accuracies)
 
-with open('models/noaugment.model.pickle','wb') as model_file:
-     pickle.dump(model, model_file)
-
-os.makedirs('results', exist_ok=True)
-
-np.save('results/train_loss', train_losses)
-np.save('results/train_accuracies', train_accuracies)
-np.save('results/val_loss', val_losses)
-np.save('results/val_acc', val_accuracies)
-
-
-model = ERecogClassifier(num_classes=num_classes)
-optimizer = optim.Adam(model.parameters(), lr=5e-4)
-train_losses, train_accuracies, val_losses, val_accuracies = utils.train_classification(model, criterion, optimizer, 50, [train_loader_augment], val_loader_augment)
-
-
-
-with open('models/augment.model.pickle','wb') as model_file:
-     pickle.dump(model, model_file)
-
-
-np.save('results/augment_train_loss', train_losses)
-np.save('results/augment_train_accuracies', train_accuracies)
-np.save('results/augment_val_loss', val_losses)
-np.save('results/augment_val_acc', val_accuracies)

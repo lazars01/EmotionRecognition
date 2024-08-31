@@ -127,6 +127,12 @@ def evaluate_classification(model, criterion, loader):
 
     with torch.no_grad():
         for inputs, labels in loader:
+
+            inputs = inputs.transpose(0, 1)
+            labels = labels.transpose(0, 1)
+            labels = labels.squeeze()
+            labels = labels.to(torch.long)
+
             outputs = model(inputs)
             total_loss += criterion(outputs.squeeze(), labels).item()
             

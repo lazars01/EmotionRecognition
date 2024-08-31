@@ -5,11 +5,11 @@ import os
 
 class CreamTorchData(Dataset):
 
-    def __init__(self, batch_files_path):
-        self.batch_files_path = batch_files_path
-        # Get a list of all .npz files in the directory
-        self.batch_files = [os.path.join(batch_files_path, file) 
-                            for file in os.listdir(batch_files_path) 
+    def __init__(self, batch_files_paths):
+        self.batch_files_path = batch_files_paths
+        self.batch_files = [os.path.join(files_path, file) 
+                            for files_path in batch_files_paths
+                            for file in os.listdir(files_path) 
                             if file.endswith('.npz')]
     
         self.emotion_map = {"angry" : 0, "disgust" : 1, "fear" : 2, "happy" : 3, "sad" : 4, "neutral" : 5}
