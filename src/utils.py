@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
-from custom_dataset import CreamTorchData
+from .custom_dataset import CreamTorchData
 
 from sklearn.metrics import confusion_matrix, accuracy_score, precision_recall_fscore_support
 import seaborn as sns

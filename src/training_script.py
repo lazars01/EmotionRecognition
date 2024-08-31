@@ -1,6 +1,6 @@
-import utils as utils
+from . import utils as utils
 import pickle
-from model import ERecogClassifier
+from .model import ERecogClassifier
 
 import os
 
@@ -10,16 +10,16 @@ import torch.nn as nn
 import torch.optim as optim
 
 
-train_loader = utils.create_data_loader(['../batches/train'], batch_size=1, shuffle=True)
-train_augment_loader = utils.create_data_loader(['../batches/train_augment', '../batches/train'], batch_size=1, shuffle=True)
-train_spec_augment_loader = utils.create_data_loader(['../batches/train_spec_augment','../batches/train'], batch_size = 1, shuffle=True)
+train_loader = utils.create_data_loader(['batches/train'], batch_size=1, shuffle=True)
+train_augment_loader = utils.create_data_loader(['batches/train_augment', 'batches/train'], batch_size=1, shuffle=True)
+train_spec_augment_loader = utils.create_data_loader(['batches/train_spec_augment','batches/train'], batch_size = 1, shuffle=True)
 
 
 loaders = [ train_loader,train_augment_loader, train_spec_augment_loader]
 paths = ['train','train_augment','train_spec_augment']
 
 
-val_loader = utils.create_data_loader(['../batches/validation'], batch_size=1, shuffle=False)
+val_loader = utils.create_data_loader(['batches/validation'], batch_size=1, shuffle=False)
 num_classes = 6
 
 for i, path in enumerate(paths):

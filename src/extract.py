@@ -1,4 +1,4 @@
-import preprocessing_CREMA as prep
+from . import preprocessing_CREMA as prep
 
 
 # Ids for  dataset
