@@ -36,10 +36,15 @@ After you set up poetry, run **extract.py** script, which will start preprocessi
 poetry run extract
 ```
 Make sure that you have atleast 20GB available disk space. \
-You can run training script using poetry script
+You can run training script, which trains different models and saves results to files, using poetry script
 ```shell
 poetry run train
 ```
+All the necessary functions used in jupyter notebooks can be found in **utils.py** script. \
+For preprocessing, we are using features of CreamData class, defined in **preprocessing_CREMA.py**. \
+Our custom torch Dataset is defined in **custom_dataset.py** file, and is allowing us to work with big datasets. \
+We are using CNN model defined in **model.py** for classification. \
+After all, our jupyter notebooks summarize all that have been done.
 
 ## Literature
 - [SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition](https://arxiv.org/abs/1904.08779)
