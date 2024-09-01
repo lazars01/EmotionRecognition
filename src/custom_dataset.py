@@ -3,6 +3,8 @@ from torch.utils.data import Dataset
 import numpy as np
 import os 
 
+# Custom dataset to enable loading batch by batch using DataLoader, so we don't need to load whole dataset into RAM
+
 class CreamTorchData(Dataset):
 
     def __init__(self, batch_files_paths):

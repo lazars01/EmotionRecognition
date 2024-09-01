@@ -72,6 +72,7 @@ class CreamData:
         self.BATCH_SIZE = batch_size
         self.standardize_audio = standardize_audio
 
+    # Extracting id, emotion and gender from filename
     def get_emotion(self, filename):
         filename = filename.split("_")
         id = filename[0]
@@ -83,6 +84,8 @@ class CreamData:
         emotion = emotion1 + emotion2
         return (id,emotion, emotion1, emotion2[1:])
     
+
+    # Making sure that each audio file is the same length 
     def standardize_audio_duration(self):
 
         input_dir = self.path
@@ -108,6 +111,7 @@ class CreamData:
                 sf.write(output_file,y_padded,sr)
             print(f"Standard {output_file}")
             
+    # Iterating through dir and collecting all the neccessary information        
     def make_dataset(self):
 
         dir_list = os.listdir(self.path_to_standardize_audio_data)
@@ -177,16 +181,16 @@ class CreamData:
     def spec_augment(self,spectrogram, num_time_masks=2, num_freq_masks=2, max_time_warp=80, T=100, F=20):
 
         spec_tensor = tf.convert_to_tensor(spectrogram[np.newaxis, :, :, np.newaxis], dtype=tf.float32)
-            # Get the shape of the spectrogram
+        # Get the shape of the spectrogram
         n_freq = spectrogram.shape[0]
         n_time = spectrogram.shape[1]
 
 
         data = self.make_dataset()
-            # Generate random warp parameters
+        # Generate random warp parameters
         source_control_point_locations = tf.random.uniform((1, 4, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
         dest_control_point_locations = tf.random.uniform((1, 4, 2), minval=0, maxval=max_time_warp, dtype=tf.float32)
-            # Apply sparse image warp
+        # Apply sparse image warp
         warped_spec_tensor = tfa.image.sparse_image_warp(
                             spec_tensor,
                             source_control_point_locations=source_control_point_locations,
@@ -197,20 +201,19 @@ class CreamData:
         warped_mel = tf.squeeze(image,axis = 0)[:,:,0].numpy()
 
         augmented_spec = warped_mel
-            # Apply time masks
+        # Apply time masks
         for _ in range(num_time_masks):
             mask_duration = np.random.randint(0, T)
             mask_start = np.random.randint(0, n_time - mask_duration - 1)
             augmented_spec[:, mask_start:mask_start + mask_duration] = 0
 
-            # Apply frequency masks
+        # Apply frequency masks
         for _ in range(num_freq_masks):
             mask_width = np.random.randint(0, F)
             mask_start = np.random.randint(0, n_freq - mask_width - 1)
             augmented_spec[mask_start:mask_start + mask_width, :] = 0
 
         return augmented_spec
-
 
     def get_default_mel_spec(self, sounds_path):
         y,sr = librosa.load(sounds_path)
@@ -239,6 +242,8 @@ class CreamData:
 
     
 
+    # Computing default mel spec for all the 3 datasets, train, validation and test
+    # Computing mel spec with augmentations only for training dataset
     def extract_features_with_labels(self, batch_data, output_path, training, batch):
         process_data = []
         lables = []
@@ -274,6 +279,7 @@ class CreamData:
 
 
 
+    # Processing batch by batch for given dataset
     def process_and_save_features(self, data_sets, batch_size, output_dir, training = False):
         num_batches = len(data_sets) // batch_size + (1 if len(data_sets) % batch_size != 0 else 0)
 
@@ -288,6 +294,8 @@ class CreamData:
             self.extract_features_with_labels(batch_data, output_path, training, batch)
         clear_memory([])
 
+    # Splitting data such that we dont have leaking data, meaning that all the audio files
+    # made by same person needs to be in the same dataset
     def train_test_split(self):
         
         female_size = len(self.female)
@@ -314,6 +322,7 @@ class CreamData:
         self.validation_set = validation.copy()
         clear_memory([test,train,validation])
     
+    # Preprocessing all three datasets
     def process_data(self):
 
         if self.standardize_audio:
