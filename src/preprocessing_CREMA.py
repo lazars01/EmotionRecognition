@@ -32,7 +32,7 @@ class CreamData:
                  hop_length = 64,
                  n_fft = 1024,
                  n_mels = 128,
-                 audio_duration = 4,
+                 audio_duration = 3,
                  train_size=0.8,
                  validation_size=0.1,
                  test_size=0.1,

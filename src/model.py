@@ -13,9 +13,12 @@ class ERecogClassifier(nn.Module):
         self.conv2 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3, stride=1)
         self.conv3 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1)
         self.conv4 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1)
+        self.conv5 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1)
+        self.conv6 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1)
         self.pool1 = nn.MaxPool2d(kernel_size=2)
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.4)
+        # Change in_features
         self.fc1 = nn.Linear(in_features=32640, out_features=128)
         self.fc2 = nn.Linear(in_features=128, out_features=num_classes)
         self.batch_norm1 = nn.BatchNorm2d(4)
@@ -24,6 +27,7 @@ class ERecogClassifier(nn.Module):
         self.batch_norm4 = nn.BatchNorm2d(64)
 
     def forward(self, x):
+        # Input dimension changed, add pad where needed
         # 128 x 1379
         x = self.conv1(x)
         # 126 x 1377
@@ -68,6 +72,14 @@ class ERecogClassifier(nn.Module):
 
         # 7 x 85
 
+        x = self.conv5(x)
+        x = self.pool1(x)
+        x = self.dropout1(x)
+
+        x = self.conv6(x)
+        x = self.pool1(x)
+        x = self.dropout1(x)
+
         x = torch.flatten(x, 1)
         x = self.fc1(x)
         x = F.relu(x)
@@ -75,7 +87,7 @@ class ERecogClassifier(nn.Module):
 
         x = self.fc2(x)
         x = self.dropout2(x)
-        output = F.log_softmax(x, dim=1)
-        return output
+        
+        return x
 
 
