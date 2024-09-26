@@ -26,10 +26,10 @@ for i, path in enumerate(paths):
      
      model = ERecogClassifier(num_classes=num_classes)
      optimizer = optim.Adam(model.parameters(), lr=5e-4)
-     criterion = nn.CrossEntropyLoss()
+     criterion = nn.NLLLoss()
 
      loader = loaders[i]
-     train_losses, train_accuracies, val_losses, val_accuracies = utils.train_classification(model, criterion, optimizer, 50, [loader], val_loader)
+     train_losses, train_accuracies, val_losses, val_accuracies = utils.train_classification(model, criterion, optimizer, 40, [loader], val_loader)
 
      os.makedirs('models',exist_ok=True)
      with open(f'models/{path}.model.pickle', 'wb') as model_file:
